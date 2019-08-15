@@ -1,0 +1,353 @@
+#!/bin/bash
+#Program 1 - matrices
+
+# NAME
+#	dims - prints out the dimensions of the matrix
+# SYNOPSIS
+#	dims FILE
+# DESCRIPTION
+#	Outputs the dimensions of the matrix contained in
+#	the file in the form "ROWS COLS".
+# AUTHOR
+#	Written by Luke Burris (burrisl@oregonstate.edu)
+function dims() {
+	rows=0
+	#Loop through each line in the matrix
+	while read myLine
+	do
+		cols=0
+		#Loop through each element on the line
+		for i in $myLine
+		do
+			cols=`expr $cols + 1`
+		done	
+		rows=`expr $rows + 1`
+	done < $1
+
+	echo "$rows $cols"
+}
+
+# NAME
+#	transpose - prints a transposed matrix
+# SYNOPSIS
+#	transpose FILE ROWS COLS
+# DESCRIPTION
+#	Transposes the matrix found in FILE and then
+#	outputs the transposed matrix.
+# AUTHOR
+#	Written by Luke Burris (burrisl@oregonstate.edu)
+function transpose() {	
+	i=0
+	tempCol="tempCol$$"
+	tempRow="tempRow$$"
+	#Loop through each column
+	while [ $i -ne $3 ]
+	do
+		i=`expr $i + 1`
+		cut -f $i $1 > $tempCol
+		col=0
+		while read myLine
+		do
+			col=`expr $col + 1`
+			echo -n "$myLine" >> $tempRow
+			if [ $col -ne $2 ]
+			then
+				echo -n -e '\t' >> $tempRow
+			else
+				echo >> $tempRow
+			fi	
+		done < $tempCol
+		#cat $tempCol | tr '\n' '\t' >> $tempRow
+		#echo >> "$tempRow"
+	done
+	cat $tempRow
+	rm -f $tempCol
+	rm -f $tempRow
+}
+
+# NAME
+#	mean - prints out the mean vector
+# SYNOPSIS
+#	mean FILE ROWS COLS
+# DESCRIPTION
+#	Outputs the mean vector of the matrix found in FILE.
+# AUTHOR
+#	Written by Luke Burris (burrisl@oregonstate.edu)
+function mean() {
+	col=0
+	tempCol="tempCol$$"
+	tempMean="tempMean$$"
+	#Loop through each column
+	while [ $col -ne $3 ]
+	do
+		col=`expr $col + 1`
+		cut -f $col $1 > $tempCol
+		#Loop through each line in $tempCol
+		sum=0
+		average=0
+		while read myLine
+		do
+			sum=`expr $sum + $myLine`	
+		done < $tempCol
+		#Equation from program 1 description. Rounds correctly
+		average=$(( ($sum + ($2 / 2) * (($sum > 0) * 2 - 1))  / $2 ))
+		echo "$average" >> $tempMean
+	done
+	#tr '\n' '\t' < $tempMean
+	col=0
+	while read myLine
+	do
+		col=`expr $col + 1`
+		echo -n "$myLine"
+		if [ $col -ne $3 ]
+		then
+			echo -n -e '\t'
+		else
+			echo
+		fi	
+	done < $tempMean
+
+	rm -f $tempCol
+	rm -f $tempMean
+}
+
+# NAME
+#	add - prints out the addition of two matrices
+# SYNOPSIS
+#	add FILE1 FILE2 ROWS1 COLS1 ROWS2 COLS2
+# DESCRIPTION
+#	Outputs the addition of the matrices found in FILE1
+#	and FILE2.
+# AUTHOR
+#	Written by Luke Burris (burrisl@oregonstate.edu)
+function add() {
+	tempRow1="tempRow1$$"
+	tempRow2="tempRow2$$"
+	tempSum="tempSum$$"
+	tempFinal1="tempFinal1$$"
+	tempFinal2="tempFinal2$$"
+	#Assign variables names for easier reading
+	rows1=$3
+	rows2=$5
+	columns1=$4
+	columns2=$6
+	#Test to see if matrices are the same dimensions
+	if ([ "$rows1" -ne "$rows2" ] || [ "$columns1" -ne "$columns2" ])
+	then
+		echo "Matrices aren't the same dimensions!" 1>&2
+		exit 1
+	fi
+	cat $1 | tr '\n' '\t' > $tempRow1
+	cat $2 | tr '\n' '\t' > $tempRow2
+	echo >> $tempRow1
+	echo >> $tempRow2
+	elements=`expr $rows1 \* $columns1`
+	i=0
+	while [ $i -ne $elements ]
+	do
+		i=`expr $i + 1`
+		var1=`cut -f $i $tempRow1`
+		var2=`cut -f $i $tempRow2`
+		sum=`expr $var1 + $var2`
+		echo "$sum" >> $tempSum		
+	done
+	cat $tempSum | tr '\n' '\t' > $tempFinal1
+	echo >> $tempFinal1
+	while read myLine
+	do
+		col=0
+		for i in $myLine
+		do
+			col=`expr $col + 1`
+			echo -n "$i" >> $tempFinal2
+			if [ `expr $col % $columns1` -eq 0 ]
+			then
+				echo >> $tempFinal2
+			else
+				echo -n -e '\t' >> $tempFinal2
+			fi
+		done		
+	done < $tempFinal1
+	#Print final version
+	cat $tempFinal2
+	#Remove all files
+	rm -f $tempRow1
+	rm -f $tempRow2
+	rm -f $tempSum
+	rm -f $tempFinal1
+	rm -f $tempFinal2
+}
+
+# NAME
+#	multiply - prints the product of two matrices
+# SYNOPSIS
+#	multiply FILE1 FILE2 ROWS1 COLS1 ROWS2 COLS2
+# DESCRIPTION
+#	Outputs the product of two matrices found in FILE1
+#	and FILE2.
+# AUTHOR
+#	Written by Luke Burris (burrisl@oregonstate.edu)
+function multiply() {
+	#Assign variables names for easier reading
+	rows1=$3
+	rows2=$5
+	columns1=$4
+	columns2=$6
+	#Check to see if Matrix 1's columns equal Matrix 2's rows
+	if [ $columns1 -ne $rows2 ]
+	then
+		echo "Matrix 1's columns do not equal Matrix 2's rows!" 1>&2
+		exit 1
+	fi
+	tempCopy="tempCopy$$"
+	tempTail="tempTail$$"
+	tempCol2="tempCol2$$"
+	tempRow1="tempRow1$$"
+	tempRow2="tempRow2$$"
+	tempSum="tempSum$$"
+	tempFinal1="tempFinal1$$"
+	tempFinal2="tempFinal2$$"
+	row=0
+	cat $1 > $tempCopy
+	#Get the current row of Matrix 1 into tempRow1
+	while [ $row -ne $rows1 ]
+	do
+		row=`expr $row + 1`
+		head -n 1 $tempCopy > $tempRow1
+		tail -n +2 $tempCopy > $tempTail && mv $tempTail $tempCopy
+		#Get the current column of Matrix 2 into tempRow2
+		col=0
+		while [ $col -ne $columns2 ]
+		do
+			col=`expr $col + 1`
+			cut -f $col $2 > $tempCol2
+			cat $tempCol2 | tr '\n' '\t' > $tempRow2
+			#Calculate dot product
+			i=0
+			sum=0
+			while [ $i -ne $columns1 ]
+			do
+				i=`expr $i + 1`
+				varRow=`cut -f $i $tempRow1`	
+				varCol=`cut -f $i $tempRow2`
+				product=`expr $varRow \* $varCol`
+				sum=`expr $sum + $product`
+			done
+			echo "$sum" >> $tempSum
+		done 
+	done
+	#Format file
+	cat $tempSum | tr '\n' '\t' > $tempFinal1
+	echo >> $tempFinal1
+	while read myLine
+	do
+		col=0
+		for i in $myLine
+		do
+			col=`expr $col + 1`
+			echo -n "$i" >> $tempFinal2
+			if [ `expr $col % $columns2` -eq 0 ]
+			then
+				echo >> $tempFinal2
+			else
+				echo -n -e '\t' >> $tempFinal2
+			fi
+		done		
+	done < $tempFinal1
+	#Print out final version	
+	cat $tempFinal2
+	#Remove temporary files
+	rm -f $tempCopy
+	rm -f $tempTail
+	rm -f $tempCol2
+	rm -f $tempRow1
+	rm -f $tempRow2
+	rm -f $tempSum
+	rm -f $tempFinal1
+	rm -f $tempFinal2
+}
+
+########################### DRIVER ###############################
+tempFile="tempFile$$"
+#Check if stdin or argument
+if ([ $# -eq 1 ] && [ -p /dev/stdin ])
+then
+	cat > $tempFile
+elif ([ $# -eq 2 ] && [ ! -p /dev/stdin ] && [ -r $2 ])
+then
+	cat $2 > $tempFile
+elif ([ $# -gt 1 ] && [ -p /dev/stdin ])
+then
+	echo "You entered input using stdin and arguments! Please use one or the other." 1>&2
+	exit 1
+fi
+#Check if arguments is >= 1 or < 3
+if ([ $# -ge 1 ] && [ $# -lt 3 ])
+then
+	#Check to make sure tempFile is readable
+	if [ -r $tempFile ]
+	then
+		#Do dims, transpose, or mean with tempFile
+		if [ "$1" == "dims" ]
+		then
+			dims $tempFile
+		elif [ "$1" == "transpose" ]
+		then
+			var=$(dims $tempFile)	
+			rows=$(echo $var | cut -d ' ' -f 1)
+			cols=$(echo $var | cut -d ' ' -f 2)
+			transpose $tempFile $rows $cols
+		elif [ "$1" == "mean" ]
+		then
+			var=$(dims $tempFile)		
+			rows=$(echo $var | cut -d ' ' -f 1)
+			cols=$(echo $var | cut -d ' ' -f 2)
+			mean $tempFile $rows $cols
+		else
+			echo "Invalid command!" 1>&2
+			exit 1
+		fi
+	else
+		echo "The file is not readable!" 1>&2
+		exit 1
+	fi
+elif [ $# -eq 3 ]
+then
+	#Check to make sure both files are readable
+	if ([ -r $2 ] && [ -r $3 ])
+	then
+		#Do add or multiply
+		if [ "$1" == "add" ]
+		then
+			var1=$(dims $2)
+			var2=$(dims $3)
+			rows1=$(echo $var1 | cut -d ' ' -f 1)
+			cols1=$(echo $var1 | cut -d ' ' -f 2)
+			rows2=$(echo $var2 | cut -d ' ' -f 1)
+			cols2=$(echo $var2 | cut -d ' ' -f 2)
+			add $2 $3 $rows1 $cols1 $rows2 $cols2
+		elif [ "$1" == "multiply" ]
+		then
+			var1=$(dims $2)
+			var2=$(dims $3)
+			rows1=$(echo $var1 | cut -d ' ' -f 1)
+			cols1=$(echo $var1 | cut -d ' ' -f 2)
+			rows2=$(echo $var2 | cut -d ' ' -f 1)
+			cols2=$(echo $var2 | cut -d ' ' -f 2)
+			multiply $2 $3 $rows1 $cols1 $rows2 $cols2	
+		else
+			echo "Invalid command!" 1>&2
+			exit 1
+		fi
+	else
+		echo "One of the files is not readable!" 1>&2
+		exit 1
+	fi
+else
+	echo "You've entered the wrong number of arguments!" 1>&2
+	exit 1	
+fi
+
+#Remove the temp file
+rm -f $tempFile
+
